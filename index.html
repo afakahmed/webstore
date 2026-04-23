@@ -73,6 +73,15 @@
         .admin-show { display: none; }
         .guest-show { display: inline-block; }
 
+        /* Mobile Cart Popup Styles */
+        .cart-popup-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 2000; justify-content: center; align-items: center; backdrop-filter: blur(4px); opacity: 0; transition: opacity 0.3s; }
+        .cart-popup-overlay.show { display: flex; opacity: 1; }
+        .cart-popup-content { background: var(--card-bg); width: 90%; max-width: 400px; border-radius: var(--radius-lg); padding: 20px; box-shadow: var(--shadow-md); transform: scale(0.9); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); max-height: 85vh; overflow-y: auto; }
+        .cart-popup-overlay.show .cart-popup-content { transform: scale(1); }
+        .cart-popup-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px dashed var(--border-color); padding-bottom: 12px; }
+        .cart-popup-title { font-size: 18px; font-weight: 800; display:flex; align-items:center; gap:8px; margin: 0; }
+        .cart-popup-close { background: rgba(0,0,0,0.05); border: none; width: 32px; height: 32px; border-radius: 50%; font-size: 16px; color: var(--text-dark); cursor: pointer; display: flex; justify-content: center; align-items: center; }
+
         @media (min-width: 768px) {
             body { padding-bottom: 30px; }
             .mobile-nav { display: none; }
@@ -241,6 +250,17 @@
         </div>
     </main>
 
+    <!-- ================= CART POPUP OVERLAY (MOBILE) ================= -->
+    <div id="cart-popup-overlay" class="cart-popup-overlay" onclick="closeCartPopup(event)">
+        <div class="cart-popup-content" onclick="event.stopPropagation()">
+            <div class="cart-popup-header">
+                <h3 class="cart-popup-title"><i class="fa-solid fa-bag-shopping" style="color:var(--primary);"></i> Added to Cart</h3>
+                <button class="cart-popup-close" onclick="closeCartPopup()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="popup-cart-items"></div>
+        </div>
+    </div>
+
     <nav class="mobile-nav">
         <a onclick="navigate('home')" id="m-nav-home" class="nav-item active"><i class="fa-solid fa-house"></i> Home</a>
         <a onclick="navigate('cart')" id="m-nav-cart" class="nav-item guest-show" style="display:flex;"><i class="fa-solid fa-bag-shopping"></i><div class="cart-badge" id="m-cart">0</div> Cart</a>
@@ -256,14 +276,14 @@
         import { getDatabase, ref, set, onValue, push, remove, update } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-database.js";
         
         const firebaseConfig = {
-  apiKey: "AIzaSyDod8QmOJa6vpA_N1ZTJIsvRpxS7lRUJLI",
-  authDomain: "javagoat-demo.firebaseapp.com",
-  databaseURL: "https://javagoat-demo-default-rtdb.firebaseio.com",
-  projectId: "javagoat-demo",
-  storageBucket: "javagoat-demo.firebasestorage.app",
-  messagingSenderId: "839150154456",
-  appId: "1:839150154456:web:d53401a9fe167781189dad"
-};
+            apiKey: "AIzaSyDod8QmOJa6vpA_N1ZTJIsvRpxS7lRUJLI",
+            authDomain: "javagoat-demo.firebaseapp.com",
+            databaseURL: "https://javagoat-demo-default-rtdb.firebaseio.com",
+            projectId: "javagoat-demo",
+            storageBucket: "javagoat-demo.firebasestorage.app",
+            messagingSenderId: "839150154456",
+            appId: "1:839150154456:web:d53401a9fe167781189dad"
+        };
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
@@ -426,14 +446,74 @@
             if(!course) return;
             if (!window.cart[id]) window.cart[id] = { quantity: 1, data: course };
             updateCartUI();
-            showFlash(`${course.name} added to cart!`);
+            
+            // Check if mobile device
+            if (window.innerWidth <= 768) {
+                openCartPopup();
+            } else {
+                showFlash(`${course.name} added to cart!`);
+            }
+        }
+
+        // Cart Popup Handlers
+        window.openCartPopup = function() {
+            document.getElementById('cart-popup-overlay').classList.add('show');
+            renderPopupCart();
+        }
+
+        window.closeCartPopup = function(event) {
+            if (event && event.target.id !== 'cart-popup-overlay') return;
+            document.getElementById('cart-popup-overlay').classList.remove('show');
+        }
+
+        window.renderPopupCart = function() {
+            const container = document.getElementById('popup-cart-items');
+            const keys = Object.keys(window.cart);
+            if (keys.length === 0) {
+                container.innerHTML = `<div style="text-align:center; padding: 20px 0; color:var(--text-light); font-weight:600;">Your cart is empty.</div>`;
+                return;
+            }
+            let total = 0;
+            let html = '';
+            for (const [id, item] of Object.entries(window.cart)) {
+                total += parseFloat(item.data.price);
+                html += `
+                <div style="display:flex; align-items:center; border-bottom:1px solid #f3f4f6; padding-bottom:12px; margin-bottom:12px;">
+                    <img src="${item.data.image}" style="width:50px; height:50px; border-radius:8px; object-fit:cover; margin-right:12px; border: 1px solid #eee;">
+                    <div style="flex-grow:1; min-width:0;">
+                        <div style="font-weight:700; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${item.data.name}</div>
+                        <div style="color:var(--primary); font-weight:800; font-size:13px; margin-top:2px;">${item.data.price} Pts</div>
+                    </div>
+                    <a onclick="removeFromCart('${id}');" style="color:#EF4444; cursor:pointer; padding:8px; background:#FEF2F2; border-radius:8px; margin-left:10px;"><i class="fa-solid fa-trash" style="font-size:12px;"></i></a>
+                </div>`;
+            }
+            html += `<div style="text-align:right; font-size:18px; font-weight:800; margin: 15px 0; color:var(--text-dark);">Total: <span style="color:var(--primary);">${total} Pts</span></div>`;
+            
+            html += `<div style="display:flex; gap:10px; flex-direction:column;">`;
+            if (window.currentUser && window.currentUser !== 'loading') {
+                html += `<a onclick="closeCartPopup(); navigate('payment')" class="btn-main">Proceed to Checkout</a>`;
+            } else {
+                html += `<div style="background:#FEF2F2; color:#EF4444; padding:12px; border-radius:8px; text-align:center; font-size:13px;">
+                    <strong>Login Required</strong><br>You must log in to purchase.<br>
+                    <a onclick="closeCartPopup(); navigate('login')" class="btn-main" style="padding:8px; margin-top:8px;">Log In to Continue</a>
+                </div>`;
+            }
+            html += `<a onclick="closeCartPopup(); navigate('cart')" class="btn-main" style="background:#F3F4F6; color:var(--text-dark); border: 1px solid #E5E7EB;">View Full Cart</a>`;
+            html += `</div>`;
+            container.innerHTML = html;
         }
 
         window.removeFromCart = function(id) {
             delete window.cart[id];
             updateCartUI();
             renderCart();
-            showFlash('Item removed.');
+            
+            // Re-render popup if it's currently open
+            if(document.getElementById('cart-popup-overlay').classList.contains('show')) {
+                renderPopupCart();
+            } else {
+                showFlash('Item removed.');
+            }
         }
 
         function renderCart() {
@@ -480,7 +560,6 @@
             for (const item of Object.values(window.cart)) total += parseFloat(item.data.price);
             document.getElementById('payment-total').innerText = total;
 
-            // Generate Dynamic QR Code embedding specified JSON data
             const qrData = {
                 email: "khanshahidkhanshahid96@gmail.com",
                 name: "java goat",
